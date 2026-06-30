@@ -92,14 +92,24 @@ When done, `rm -f /data/k8s-watcher/events.consuming`.
 
 ### 4. Triage and report
 
-For the events you just read:
+**Read `references/triage-runbook.md` and follow it** — it contains the full triage method,
+a severity rubric, a per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled,
+FailedScheduling, FailedMount, probe Unhealthy, FailedCreate/quota, node pressure, HPA
+metric failures, …) with the exact diagnostic commands, likely causes, and remediations,
+plus the required output format and safety rules. The essentials:
 
-- **Group** related events (same `involvedObject` / `reason`); don't list raw lines.
-- **Assess severity** and likely **root cause**. Dig deeper when it helps — e.g. use the
-  lens MCP `kubectl` tool to `describe` the object or fetch recent logs
-  (`kubectl logs <pod> -n <ns> --tail=50 --previous`).
-- **Report concisely**: what's failing, where (namespace/object), why, and the suggested
-  next action. Skip noise.
+- **Group** related events (same `involvedObject` / `reason`); triage the owning workload
+  (Pod → ReplicaSet → Deployment/Job/StatefulSet), not each raw line.
+- **Scope the blast radius** (one pod vs. whole workload vs. node vs. cluster) — it drives
+  severity more than the event count.
+- **Gather evidence** with the lens MCP `kubectl` tool: `describe` the object, current +
+  `--previous` logs, the object's recent events, `kubectl top` / Prometheus for resource
+  pressure, node conditions. Match the symptom to its runbook section for the right probes.
+- **Report** per the runbook's format: what/where, severity, root-cause hypothesis (with
+  confidence + evidence), suggested immediate + durable fix, and what to watch.
+- **Safety:** default to read-only. Never run mutating commands (`delete`, `scale`,
+  `rollout restart`, `edit`, `apply`, `drain`, `patch`) without **explicit user
+  confirmation** — propose the exact command instead.
 - If there were **no** new events and the watcher is healthy, produce a brief all-clear —
   the heartbeat's DELIVER/SUPPRESS gate will suppress it. Never comment on the mechanism
   itself.

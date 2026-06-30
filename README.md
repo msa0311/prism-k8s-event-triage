@@ -61,6 +61,7 @@ Set the heartbeat interval to your acceptable watcher-restart recovery window
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | The agent-facing playbook (mode detection, supervise, read, triage, fallback). |
+| `references/triage-runbook.md` | Comprehensive triage reference: method, severity rubric, per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled, FailedScheduling, FailedMount, probe failures, quota, node pressure, HPA, …), output format, safety rules. Loaded on demand. |
 | `scripts/k8s-event-watcher.sh` | The background watcher: streams Warning events, appends to the results file, debounced heartbeat poke, self-reconnecting. |
 
 ## Configuration (watcher env, all optional)
