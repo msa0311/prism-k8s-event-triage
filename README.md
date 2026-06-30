@@ -48,19 +48,16 @@ Set the heartbeat interval to your acceptable watcher-restart recovery window
 
 ## Requirements
 
-- A background shell `kubectl` with cluster credentials in the agent's environment
-  (the watcher runs as a plain process, so it cannot use the lens MCP `kubectl`
-  *tool*). The skill verifies this on first run.
-- **Fallback:** if shell `kubectl` has no cluster access, the skill automatically
-  falls back to **poll mode** — querying recent Warning events via the lens MCP
-  `kubectl` tool on each heartbeat (latency = heartbeat interval).
+- A kubeconfig + `kubectl` in the sandbox with cluster access — the watcher runs as a
+  plain background process and uses ordinary `kubectl`. The skill verifies access on each
+  run and reports clearly if the kubeconfig is missing or the API server is unreachable.
 - `jq` and `curl` (present in the agent-runtime container).
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | The agent-facing playbook (mode detection, supervise, read, triage, fallback). |
+| `SKILL.md` | The agent-facing playbook (verify access, supervise the watcher, read events, triage). |
 | `references/triage-runbook.md` | Comprehensive triage reference: method, severity rubric, per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled, FailedScheduling, FailedMount, probe failures, quota, node pressure, HPA, …), output format, safety rules. Loaded on demand. |
 | `scripts/k8s-event-watcher.sh` | The background watcher: streams Warning events, appends to the results file, debounced heartbeat poke, self-reconnecting. |
 

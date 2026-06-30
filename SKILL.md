@@ -37,18 +37,19 @@ kubectl watch (type=Warning) ──append──► /data/k8s-watcher/events.json
 
 ## Run this every heartbeat — step by step
 
-### 1. Determine the mode (first run, then remember via state files)
+### 1. Verify cluster access
 
-Check whether a **background shell `kubectl`** can reach the cluster:
+The sandbox provides a kubeconfig and `kubectl`. Confirm it works before (re)starting the
+watcher:
 
 ```bash
-kubectl get events -A --request-timeout=5s >/dev/null 2>&1 && echo OK || echo NO_SHELL_KUBECTL
+kubectl get events -A --request-timeout=5s >/dev/null 2>&1 && echo OK || echo NO_KUBECTL
 ```
 
-- `OK` → **Watcher mode** (steps 2–4). This is the intended, immediate-reaction path.
-- `NO_SHELL_KUBECTL` → **Poll mode** (step 5). The background watcher can't run because
-  cluster access is only available through the lens MCP `kubectl` *tool* (which a
-  background process cannot call). Fall back to polling via that tool each heartbeat.
+- `OK` → continue to step 2.
+- `NO_KUBECTL` → cluster access is broken (missing/invalid kubeconfig, or the API server is
+  unreachable). Don't spawn a watcher that can't reach the cluster — report this plainly to
+  the user so they can fix the kubeconfig, and stop here.
 
 ### 2. Ensure the watcher is running (supervise)
 
@@ -102,9 +103,9 @@ plus the required output format and safety rules. The essentials:
   (Pod → ReplicaSet → Deployment/Job/StatefulSet), not each raw line.
 - **Scope the blast radius** (one pod vs. whole workload vs. node vs. cluster) — it drives
   severity more than the event count.
-- **Gather evidence** with the lens MCP `kubectl` tool: `describe` the object, current +
-  `--previous` logs, the object's recent events, `kubectl top` / Prometheus for resource
-  pressure, node conditions. Match the symptom to its runbook section for the right probes.
+- **Gather evidence** with `kubectl`: `describe` the object, current + `--previous` logs,
+  the object's recent events, `kubectl top` for resource pressure, node conditions. Match
+  the symptom to its runbook section for the right probes.
 - **Report** per the runbook's format: what/where, severity, root-cause hypothesis (with
   confidence + evidence), suggested immediate + durable fix, and what to watch.
 - **Safety:** default to read-only. Never run mutating commands (`delete`, `scale`,
@@ -122,19 +123,6 @@ kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp -o 
 ```
 
 Report only genuinely new/actionable items; the 24h duplicate suppression handles repeats.
-
-### 5. Poll mode (fallback only — when shell kubectl has no cluster access)
-
-There is no background watcher in this mode, so reaction latency equals the heartbeat
-interval. On each heartbeat, use the lens MCP `kubectl` **tool** to list recent warnings
-and triage them exactly as in step 4:
-
-```
-kubectl get events -A --field-selector type=Warning --sort-by=.lastTimestamp
-```
-
-(For lower latency in poll mode, set a shorter heartbeat interval — but prefer fixing
-shell kubectl access so the immediate watcher path works.)
 
 ---
 

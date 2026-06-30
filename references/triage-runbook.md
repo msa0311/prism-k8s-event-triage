@@ -35,10 +35,11 @@ kubectl describe node <node>                                 # node conditions, 
 kubectl top pod <pod> -n <ns>                                # live usage (needs metrics-server)
 ```
 
-Corroborate with the Prometheus tools when available (lens MCP):
-`prometheus-get-alerts` (is an alert already firing?), and queries like
-`container_memory_working_set_bytes`, `kube_pod_container_status_restarts_total`,
-`kube_pod_status_phase` to confirm OOM/restart/pending patterns.
+Corroborate with metrics when a backend is reachable — `kubectl top` (metrics-server) or,
+if a Prometheus query tool is available, series like `container_memory_working_set_bytes`,
+`kube_pod_container_status_restarts_total`, `kube_pod_status_phase` to confirm
+OOM/restart/pending patterns. If no metrics backend is reachable, rely on `kubectl
+describe` and logs.
 
 ---
 
