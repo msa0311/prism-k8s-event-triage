@@ -75,7 +75,8 @@ claude_code({
     Do NOT run any mutating command (delete/scale/rollout/edit/apply/drain/patch).
     Return a concise report: what is failing, where (namespace/object), severity, the
     root-cause hypothesis with evidence, and the suggested fix (as a command to PROPOSE,
-    not run)."
+    not run). For each resource you cite, include a lens:// deep link per the runbook's
+    'Deep links to Lens Desktop' section so the user can open it directly in Lens Desktop."
 })
 ```
 

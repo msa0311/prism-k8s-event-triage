@@ -162,9 +162,57 @@ Per distinct issue, keep it tight:
 - **Root cause:** hypothesis + confidence; cite the evidence (log line, describe field).
 - **Suggested action:** immediate mitigation + durable fix; flag anything needing approval.
 - **Watch / escalate:** what to monitor and the threshold for paging a human.
+- **Open in Lens:** a `lens://` deep link to the resource (see "Deep links" below) so the
+  user can jump straight to it — link the failing object and, when useful, its owning workload.
 
 Lead with the highest severity. Collapse repeats. Don't dump raw event lines or full logs —
 quote only the decisive snippet.
+
+---
+
+## Deep links to Lens Desktop (`lens://`)
+
+Attach a `lens://` link to each resource you report so the user can open it directly in
+Lens Desktop. Format:
+
+```
+lens://app/open/direct/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
+```
+
+**CLUSTER_SPECIFIER** — for a normal kubeconfig ("direct") cluster it is
+`sha256(<server URL>)[:32]`. Compute it once from the active kubeconfig:
+
+```bash
+SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+SPECIFIER=$(printf '%s' "$SERVER" | sha256sum | cut -c1-32)
+```
+
+Lens finds the cluster by hashing each catalog cluster's server address and matching this
+value, so **the cluster must already be in the user's Lens catalog and its server URL must
+match** what you hashed. If the agent reaches the cluster via a different address than the
+user's Lens does, the link still opens Lens but won't resolve the cluster — degrade to a
+cluster/list link (drop `kube-details`). If `LENS_CLUSTER_SPECIFIER` / `LENS_CONNECTION_TYPE`
+are provided in the environment, use those instead of computing. For Lens Spaces clusters use
+`.../open/teamwork/<cluster metadata.id>/...`.
+
+**RESOURCE_TAB** — the resource's plural: `pods`, `deployments`, `replicasets`,
+`statefulsets`, `daemonsets`, `jobs`, `services`, `nodes`, `persistentvolumeclaims`, …
+
+**kube-details** — the URL-encoded API path of the specific object (`.metadata.selfLink` is
+gone in modern k8s, so build it):
+- **core/v1** (Pod, Service, ConfigMap, Endpoints, PVC, Event): namespaced →
+  `/api/v1/namespaces/<ns>/<plural>/<name>`; cluster-scoped (e.g. Node) → `/api/v1/<plural>/<name>`.
+- **grouped** (Deployment/ReplicaSet/StatefulSet/DaemonSet → `apps/v1`; Job/CronJob →
+  `batch/v1`; Ingress → `networking.k8s.io/v1`): `/apis/<group>/<version>/namespaces/<ns>/<plural>/<name>`.
+- URL-encode it — every `/` becomes `%2F`. (Unsure of the group/plural? `kubectl api-resources`.)
+
+**Examples:**
+- Pod: `lens://app/open/direct/<SPEC>/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdefault%2Fpods%2Fweb-1`
+- Deployment: `lens://app/open/direct/<SPEC>/cluster/deployments?kube-details=%2Fapis%2Fapps%2Fv1%2Fnamespaces%2Fdefault%2Fdeployments%2Fweb`
+- Fallback (open the list only, no details): `lens://app/open/direct/<SPEC>/cluster/pods`
+
+Render as a markdown link in the report, e.g.
+`Pod \`default/web-1\` — [open in Lens](lens://app/open/direct/<SPEC>/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdefault%2Fpods%2Fweb-1)`.
 
 ---
 
