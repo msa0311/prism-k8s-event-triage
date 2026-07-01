@@ -100,6 +100,12 @@ Then `shell_spawn`:
 bash /data/k8s-watcher/k8s-event-watcher.sh
 ```
 
+The watcher runs a **preflight** and exits immediately with a clear message if `kubectl`
+can't reach the cluster. If it reports `localhost:8080` refused, `kubectl` has no
+kubeconfig in the spawned process's context (a spawned process doesn't inherit an
+interactive shell's un-exported `KUBECONFIG` or `kubectl` aliases) — spawn it with an
+explicit path: `K8S_WATCHER_KUBECONFIG=/path/to/kubeconfig bash …/k8s-event-watcher.sh`.
+
 Check whether it's already running: `pgrep -f k8s-event-watcher`. `<this-skill-dir>` is
 where this `SKILL.md` was loaded from (`find / -name k8s-event-watcher.sh 2>/dev/null | head -1`).
 

@@ -67,6 +67,7 @@ keep-alive task, heartbeat watchdog, or in-cluster Deployment).
 | Env var | Default | Purpose |
 |---------|---------|---------|
 | `K8S_WATCHER_STATE_DIR` | `/data/k8s-watcher` | Where the logfile / pidfile live. |
+| `K8S_WATCHER_KUBECONFIG` | _(ambient `KUBECONFIG`)_ | Explicit kubeconfig path. Set this if `kubectl` in the watcher's process hits `localhost:8080` — a spawned process doesn't inherit an interactive shell's un-exported `KUBECONFIG` or `kubectl` aliases. |
 | `K8S_WATCHER_CRON_URL` | `http://localhost:3003/agents/cron-tasks` | Runtime cron API used to schedule the one-shot triage task. |
 | `K8S_WATCHER_DEBOUNCE_SECONDS` | `15` | Minimum gap between scheduled triage tasks (coalesces event bursts). |
 | `K8S_WATCHER_NAMESPACE` | _(all)_ | Scope the watch to a single namespace. |

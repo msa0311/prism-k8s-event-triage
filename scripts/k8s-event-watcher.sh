@@ -55,6 +55,24 @@ mkdir -p "$STATE_DIR"
 echo "$$" > "$PID_FILE"
 touch "$ALIVE_FILE"
 
+# Kubeconfig. A spawned/background process does NOT inherit an interactive
+# shell's un-exported KUBECONFIG or kubectl aliases — the usual cause of
+# "connection to the server localhost:8080 was refused". Pin it explicitly when
+# provided; otherwise rely on the exported KUBECONFIG / default in the env.
+if [[ -n "${K8S_WATCHER_KUBECONFIG:-}" ]]; then
+  export KUBECONFIG="$K8S_WATCHER_KUBECONFIG"
+fi
+
+# Preflight: fail fast (don't loop) if kubectl can't reach the cluster.
+if ! kubectl get events -A --request-timeout=5s >/dev/null 2>"$STATE_DIR/preflight.err"; then
+  echo "$LOG_PREFIX FATAL: kubectl cannot reach the cluster:" >&2
+  tail -n 2 "$STATE_DIR/preflight.err" | sed "s/^/$LOG_PREFIX   /" >&2
+  echo "$LOG_PREFIX   Point the watcher at a kubeconfig: K8S_WATCHER_KUBECONFIG=/path/to/kubeconfig" >&2
+  echo "$LOG_PREFIX   (a spawned process does not inherit an interactive shell's un-exported KUBECONFIG or kubectl aliases)" >&2
+  exit 1
+fi
+echo "$LOG_PREFIX preflight OK — cluster reachable" >&2
+
 if [[ -n "$NAMESPACE" ]]; then
   SCOPE_ARGS=(--namespace "$NAMESPACE")
 else
