@@ -134,13 +134,14 @@ Report only genuinely new/actionable items; the 24h duplicate suppression handle
 2. **Point the heartbeat at it.** Set `heartbeatMd` (via the agent-config tool or the UI) to:
    > On each heartbeat, follow the **k8s-event-triage** skill: ensure the Kubernetes event
    > watcher is running and triage any new Warning events it has captured.
-3. **Set the heartbeat interval as a watchdog, not a triage cadence.** Triage is driven by
-   the watcher's pokes; the timer only needs to re-spawn a dead watcher after a crash or
-   container restart (the runtime does **not** run a heartbeat at boot — the first timer
-   tick fires one full interval later). Pick the interval = your acceptable worst-case
-   recovery window after a restart, e.g. **30–60 min**.
-4. The first heartbeat will detect the watcher is absent and spawn it; from then on it
+3. The first heartbeat will detect the watcher is absent and spawn it; from then on it
    self-heals.
+
+> **This skill never sets or changes the agent's heartbeat interval.** The schedule is the
+> operator's choice, configured outside the skill. Real-time triage comes from the watcher's
+> pokes; the heartbeat timer only serves as a watchdog that re-spawns a dead watcher after a
+> crash/restart (the runtime doesn't run a heartbeat at boot, so a shorter interval just
+> means faster recovery). Tune it — or don't — independently of this skill.
 
 ## Notes & limits
 

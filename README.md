@@ -43,8 +43,9 @@ Then set the agent's `heartbeatMd` to:
 > On each heartbeat, follow the **k8s-event-triage** skill: ensure the Kubernetes
 > event watcher is running and triage any new Warning events it has captured.
 
-Set the heartbeat interval to your acceptable watcher-restart recovery window
-(e.g. 30–60 min) — it is a watchdog, not the triage cadence.
+The skill does **not** set or change the heartbeat interval — that's the operator's
+choice, configured independently. Real-time triage comes from the watcher's pokes; the
+heartbeat timer only acts as a watchdog that re-spawns a dead watcher after a crash/restart.
 
 ## Requirements
 
