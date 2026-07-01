@@ -40,11 +40,6 @@ CRON_URL="${K8S_WATCHER_CRON_URL:-http://localhost:3003/agents/cron-tasks}"
 FLUSH_SECONDS="${K8S_WATCHER_FLUSH_SECONDS:-${K8S_WATCHER_DEBOUNCE_SECONDS:-15}}"
 NAMESPACE="${K8S_WATCHER_NAMESPACE:-}"
 TASK_NAME="${K8S_WATCHER_TASK_NAME:-k8s-event-triage}"
-# One-shot schedule for the triage task. Default "in 1 minute" — the smallest the
-# runtime accepts as deployed (its schedule parser rejects sub-minute one-shots with
-# HTTP 400). After the runtime is redeployed to a build whose parseSchedule supports
-# seconds, set K8S_WATCHER_SCHEDULE="in 1 second" (≈instant) or "in 0 seconds".
-SCHEDULE="${K8S_WATCHER_SCHEDULE:-in 1 minute}"
 COOLDOWN_SECONDS="${K8S_WATCHER_COOLDOWN_SECONDS:-21600}"
 # Optional: pin the Lens cluster specifier for lens:// deep links. Set this when the
 # agent reaches the cluster via a tunnel (its kubeconfig server URL differs from the
@@ -104,12 +99,13 @@ schedule_triage_for() {
     lens_hint=" Do NOT add lens:// deep links — no cluster specifier is configured, and a computed one would not match the user's Lens."
   fi
   instruction="Kubernetes Warning events were captured by the k8s event watcher and saved to ${batch}. Triage them now by following the \"k8s-event-triage\" skill: read ${batch}, group and debounce the warnings, and diagnose the ongoing cluster issue using the skill's triage runbook (describe / logs / events / node conditions). Report what is failing, where (namespace/object), severity, the likely root cause with evidence, and the suggested action. Stay read-only — never run mutating kubectl commands without explicit user confirmation. When done, delete ${batch}.${lens_hint}"
-  # Schedule from $SCHEDULE (default "in 1 minute"). The deployed runtime rejects
-  # sub-minute one-shots (HTTP 400); a build with seconds support accepts
-  # "in 1 second"/"in 0 seconds" — set K8S_WATCHER_SCHEDULE then.
+  # NOTE: "in 1 minute" (not seconds). The runtime's schedule parser only accepts
+  # minute/hour granularity for one-shots; sub-minute values are rejected as an
+  # invalid cron expression (HTTP 400). This is the smallest reliable one-shot,
+  # so triage fires within ~1 minute of a batch.
   payload="$(jq -n \
     --arg name "$TASK_NAME" \
-    --arg schedule "$SCHEDULE" \
+    --arg schedule "in 1 minute" \
     --arg instruction "$instruction" \
     '{name: $name, schedule: $schedule, instruction: $instruction}')"
   code="$(curl -s -o /dev/null -w '%{http_code}' \
