@@ -148,10 +148,12 @@ where this `SKILL.md` was loaded from (`find / -name k8s-event-watcher.sh 2>/dev
 
 **Keeping the watcher alive across restarts.** A `shell_spawn` watcher dies if the container
 restarts, and a dead watcher can't schedule its own resurrection. Pick one:
-- **Recurring keep-alive task** — a low-frequency cron task (e.g. `every 10 minutes`) whose
+- **Recurring keep-alive task** — a **low-frequency** cron task (e.g. `every 8 hours`) whose
   instruction is *"if `pgrep -f k8s-event-watcher` finds nothing, re-spawn the watcher via
-  shell_spawn; otherwise reply with nothing."* (Silent-when-healthy relies on the runtime
-  skipping empty cron output.)
+  shell_spawn; otherwise reply with nothing."* Keep it infrequent: it's only a watchdog for
+  the rare case the watcher dies (container restart), not a triage cadence — triage is driven
+  by the watcher's own batches. A longer interval also means fewer of its (unsuppressed)
+  "healthy" posts, since cron delivers every run.
 - **Heartbeat watchdog** — if you already run a heartbeat, add one line to `heartbeatMd`:
   *"ensure the k8s-event-watcher is running; re-spawn it if not."* Its DELIVER/SUPPRESS gate
   keeps the healthy case silent. (This is supervision only — triage still runs off the tasks.)
