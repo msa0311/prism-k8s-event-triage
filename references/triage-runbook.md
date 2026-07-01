@@ -162,8 +162,9 @@ Per distinct issue, keep it tight:
 - **Root cause:** hypothesis + confidence; cite the evidence (log line, describe field).
 - **Suggested action:** immediate mitigation + durable fix; flag anything needing approval.
 - **Watch / escalate:** what to monitor and the threshold for paging a human.
-- **Open in Lens:** a `lens://` deep link to the resource (see "Deep links" below) so the
-  user can jump straight to it — link the failing object and, when useful, its owning workload.
+- **Open in Lens:** *(only when a cluster specifier was provided — see "Deep links" below)* a
+  `lens://` deep link to the resource; link the failing object and, when useful, its owning
+  workload. Omit this line entirely if no specifier is available.
 
 Lead with the highest severity. Collapse repeats. Don't dump raw event lines or full logs —
 quote only the decisive snippet.
@@ -172,32 +173,23 @@ quote only the decisive snippet.
 
 ## Deep links to Lens Desktop (`lens://`)
 
-Attach a `lens://` link to each resource you report so the user can open it directly in
-Lens Desktop. Format:
+Add a `lens://` link to each resource **only when your task instruction gives you a cluster
+specifier**. If it does not, **omit `lens://` links entirely** — do not compute one and do not
+emit a partial/list link. The agent's kubeconfig server URL often differs from the user's Lens
+(e.g. behind a tunnel), so a self-computed hash would open Lens but fail to resolve the
+cluster; a wrong link is worse than none. Format:
 
 ```
-lens://app/open/direct/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
+lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
 ```
 
-**CLUSTER_SPECIFIER** — Lens resolves the cluster by hashing each catalog cluster's server
-address, so the specifier must be `sha256(<the server URL the USER's Lens uses>)[:32]`. Use,
-in order:
+**CLUSTER_SPECIFIER / CONNECTION_TYPE** — use exactly what your instruction provides
+(`clusterSpecifier=…`, `connectionType=…`); never recompute or guess.
 
-1. **A specifier given in your task instruction** (the watcher passes `clusterSpecifier=…` /
-   `connectionType=…` when configured) — use it verbatim; do not recompute.
-2. Otherwise **compute from the active kubeconfig** — but ONLY valid if the agent reaches the
-   cluster at the same address the user's Lens does:
-   ```bash
-   SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-   SPECIFIER=$(printf '%s' "$SERVER" | sha256sum | cut -c1-32)
-   ```
-
-⚠️ **Do not compute when the cluster is reached via a tunnel/proxy** — the agent's kubeconfig
-server URL then differs from the user's local Lens, so the hash won't match and the link
-won't resolve the cluster. In that case rely on the instruction-provided specifier; if none
-is available, degrade to a cluster/list link (drop `kube-details`) rather than emit a wrong
-one. The cluster must already exist in the user's Lens catalog. For Lens Spaces clusters use
-`.../open/teamwork/<cluster metadata.id>/...` (connectionType `teamwork`).
+> Operator note (not the agent's job): the value to configure in `LENS_CLUSTER_SPECIFIER` is
+> `sha256(<the server URL the user's Lens uses>)[:32]` for a `direct` cluster, or the cluster's
+> `metadata.id` with `LENS_CONNECTION_TYPE=teamwork` for a Lens Spaces cluster. The cluster must
+> already exist in the user's Lens catalog.
 
 **RESOURCE_TAB** — the resource's plural: `pods`, `deployments`, `replicasets`,
 `statefulsets`, `daemonsets`, `jobs`, `services`, `nodes`, `persistentvolumeclaims`, …

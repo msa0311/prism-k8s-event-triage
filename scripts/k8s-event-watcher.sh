@@ -94,9 +94,11 @@ schedule_triage_for() {
   local batch="$1"
   local instruction payload code lens_hint=""
   if [[ -n "$LENS_CLUSTER_SPECIFIER" ]]; then
-    lens_hint=" When building lens:// deep links, use connectionType=${LENS_CONNECTION_TYPE} and clusterSpecifier=${LENS_CLUSTER_SPECIFIER} EXACTLY — do NOT compute the specifier from kubectl; this cluster is reached via a tunnel, so its kubeconfig server URL differs from the user's Lens."
+    lens_hint=" Also add a lens:// deep link per cited resource (per the skill's 'Deep links' section), using connectionType=${LENS_CONNECTION_TYPE} and clusterSpecifier=${LENS_CLUSTER_SPECIFIER} EXACTLY — do NOT compute the specifier from kubectl (this cluster is reached via a tunnel, so its kubeconfig server URL differs from the user's Lens)."
+  else
+    lens_hint=" Do NOT add lens:// deep links — no cluster specifier is configured, and a computed one would not match the user's Lens."
   fi
-  instruction="Kubernetes Warning events were captured by the k8s event watcher and saved to ${batch}. Triage them now by following the \"k8s-event-triage\" skill: read ${batch}, group and debounce the warnings, and diagnose the ongoing cluster issue using the skill's triage runbook (describe / logs / events / node conditions). Report what is failing, where (namespace/object), severity, the likely root cause with evidence, and the suggested action, and include a lens:// deep link per cited resource. Stay read-only — never run mutating kubectl commands without explicit user confirmation. When done, delete ${batch}.${lens_hint}"
+  instruction="Kubernetes Warning events were captured by the k8s event watcher and saved to ${batch}. Triage them now by following the \"k8s-event-triage\" skill: read ${batch}, group and debounce the warnings, and diagnose the ongoing cluster issue using the skill's triage runbook (describe / logs / events / node conditions). Report what is failing, where (namespace/object), severity, the likely root cause with evidence, and the suggested action. Stay read-only — never run mutating kubectl commands without explicit user confirmation. When done, delete ${batch}.${lens_hint}"
   # NOTE: "in 1 minute" (not seconds). The runtime's schedule parser only accepts
   # minute/hour granularity for one-shots; sub-minute values are rejected as an
   # invalid cron expression (HTTP 400). This is the smallest reliable one-shot,
