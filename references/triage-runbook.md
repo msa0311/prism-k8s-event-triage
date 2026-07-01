@@ -179,21 +179,25 @@ Lens Desktop. Format:
 lens://app/open/direct/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
 ```
 
-**CLUSTER_SPECIFIER** — for a normal kubeconfig ("direct") cluster it is
-`sha256(<server URL>)[:32]`. Compute it once from the active kubeconfig:
+**CLUSTER_SPECIFIER** — Lens resolves the cluster by hashing each catalog cluster's server
+address, so the specifier must be `sha256(<the server URL the USER's Lens uses>)[:32]`. Use,
+in order:
 
-```bash
-SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-SPECIFIER=$(printf '%s' "$SERVER" | sha256sum | cut -c1-32)
-```
+1. **A specifier given in your task instruction** (the watcher passes `clusterSpecifier=…` /
+   `connectionType=…` when configured) — use it verbatim; do not recompute.
+2. Otherwise **compute from the active kubeconfig** — but ONLY valid if the agent reaches the
+   cluster at the same address the user's Lens does:
+   ```bash
+   SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+   SPECIFIER=$(printf '%s' "$SERVER" | sha256sum | cut -c1-32)
+   ```
 
-Lens finds the cluster by hashing each catalog cluster's server address and matching this
-value, so **the cluster must already be in the user's Lens catalog and its server URL must
-match** what you hashed. If the agent reaches the cluster via a different address than the
-user's Lens does, the link still opens Lens but won't resolve the cluster — degrade to a
-cluster/list link (drop `kube-details`). If `LENS_CLUSTER_SPECIFIER` / `LENS_CONNECTION_TYPE`
-are provided in the environment, use those instead of computing. For Lens Spaces clusters use
-`.../open/teamwork/<cluster metadata.id>/...`.
+⚠️ **Do not compute when the cluster is reached via a tunnel/proxy** — the agent's kubeconfig
+server URL then differs from the user's local Lens, so the hash won't match and the link
+won't resolve the cluster. In that case rely on the instruction-provided specifier; if none
+is available, degrade to a cluster/list link (drop `kube-details`) rather than emit a wrong
+one. The cluster must already exist in the user's Lens catalog. For Lens Spaces clusters use
+`.../open/teamwork/<cluster metadata.id>/...` (connectionType `teamwork`).
 
 **RESOURCE_TAB** — the resource's plural: `pods`, `deployments`, `replicasets`,
 `statefulsets`, `daemonsets`, `jobs`, `services`, `nodes`, `persistentvolumeclaims`, …

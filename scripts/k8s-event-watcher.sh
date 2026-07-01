@@ -41,6 +41,12 @@ FLUSH_SECONDS="${K8S_WATCHER_FLUSH_SECONDS:-${K8S_WATCHER_DEBOUNCE_SECONDS:-15}}
 NAMESPACE="${K8S_WATCHER_NAMESPACE:-}"
 TASK_NAME="${K8S_WATCHER_TASK_NAME:-k8s-event-triage}"
 COOLDOWN_SECONDS="${K8S_WATCHER_COOLDOWN_SECONDS:-21600}"
+# Optional: pin the Lens cluster specifier for lens:// deep links. Set this when the
+# agent reaches the cluster via a tunnel (its kubeconfig server URL differs from the
+# user's local Lens, so a computed hash would not match). Value = sha256(<the server
+# URL the user's Lens uses>)[:32]. Passed through to the triage task's instruction.
+LENS_CLUSTER_SPECIFIER="${LENS_CLUSTER_SPECIFIER:-}"
+LENS_CONNECTION_TYPE="${LENS_CONNECTION_TYPE:-direct}"
 
 EVENTS_FILE="$STATE_DIR/events.jsonl"
 PID_FILE="$STATE_DIR/watcher.pid"
@@ -86,8 +92,11 @@ trap cleanup EXIT INT TERM
 # Schedule ONE run-now triage task for a specific, non-empty batch file.
 schedule_triage_for() {
   local batch="$1"
-  local instruction payload code
-  instruction="Kubernetes Warning events were captured by the k8s event watcher and saved to ${batch}. Triage them now by following the \"k8s-event-triage\" skill: read ${batch}, group and debounce the warnings, and diagnose the ongoing cluster issue using the skill's triage runbook (describe / logs / events / node conditions). Report what is failing, where (namespace/object), severity, the likely root cause with evidence, and the suggested action. Stay read-only — never run mutating kubectl commands without explicit user confirmation. When done, delete ${batch}."
+  local instruction payload code lens_hint=""
+  if [[ -n "$LENS_CLUSTER_SPECIFIER" ]]; then
+    lens_hint=" When building lens:// deep links, use connectionType=${LENS_CONNECTION_TYPE} and clusterSpecifier=${LENS_CLUSTER_SPECIFIER} EXACTLY — do NOT compute the specifier from kubectl; this cluster is reached via a tunnel, so its kubeconfig server URL differs from the user's Lens."
+  fi
+  instruction="Kubernetes Warning events were captured by the k8s event watcher and saved to ${batch}. Triage them now by following the \"k8s-event-triage\" skill: read ${batch}, group and debounce the warnings, and diagnose the ongoing cluster issue using the skill's triage runbook (describe / logs / events / node conditions). Report what is failing, where (namespace/object), severity, the likely root cause with evidence, and the suggested action, and include a lens:// deep link per cited resource. Stay read-only — never run mutating kubectl commands without explicit user confirmation. When done, delete ${batch}.${lens_hint}"
   # NOTE: "in 1 minute" (not seconds). The runtime's schedule parser only accepts
   # minute/hour granularity for one-shots; sub-minute values are rejected as an
   # invalid cron expression (HTTP 400). This is the smallest reliable one-shot,
