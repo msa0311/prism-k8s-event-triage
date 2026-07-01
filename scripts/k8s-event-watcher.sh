@@ -24,6 +24,14 @@
 #   K8S_WATCHER_NAMESPACE       default "" (all namespaces; set to scope to one)
 #   K8S_WATCHER_TASK_NAME       default k8s-event-triage
 #   K8S_WATCHER_KUBECONFIG      default "" (else ambient KUBECONFIG / default)
+#   K8S_WATCHER_COOLDOWN_SECONDS default 21600 (6h) — per-issue dedup window. An
+#                               issue is keyed by ns/kind/name/reason. A repeat
+#                               within the cooldown is SUPPRESSED (not captured),
+#                               which stops CrashLoopBackOff-style events — whose
+#                               .count ticks up every ~minute — from generating
+#                               one identical triage per minute. First occurrence
+#                               is always captured; after the cooldown expires one
+#                               refresh triage is allowed.
 #
 set -uo pipefail
 
@@ -32,10 +40,12 @@ CRON_URL="${K8S_WATCHER_CRON_URL:-http://localhost:3003/agents/cron-tasks}"
 FLUSH_SECONDS="${K8S_WATCHER_FLUSH_SECONDS:-${K8S_WATCHER_DEBOUNCE_SECONDS:-15}}"
 NAMESPACE="${K8S_WATCHER_NAMESPACE:-}"
 TASK_NAME="${K8S_WATCHER_TASK_NAME:-k8s-event-triage}"
+COOLDOWN_SECONDS="${K8S_WATCHER_COOLDOWN_SECONDS:-21600}"
 
 EVENTS_FILE="$STATE_DIR/events.jsonl"
 PID_FILE="$STATE_DIR/watcher.pid"
 ALIVE_FILE="$STATE_DIR/watcher.alive"
+SEEN_FILE="$STATE_DIR/seen.tsv"   # per-issue dedup: <epoch>TAB<key> lines
 LOG_PREFIX="[k8s-event-watcher]"
 
 mkdir -p "$STATE_DIR"
@@ -107,6 +117,34 @@ flusher() {
   done
 }
 
+# Per-issue dedup. Returns 0 (capture) if this issue key has NOT been triaged
+# within COOLDOWN_SECONDS; else 1 (suppress). On capture it records the key with
+# the current timestamp so subsequent .count ticks of the same event are dropped.
+# Key = ns/kind/name/reason — the identity of an ongoing problem, independent of
+# the ever-incrementing event .count. SEEN_FILE is pruned of expired keys so it
+# cannot grow unbounded.
+should_capture() {
+  local key="$1" now entry last
+  now="$(date +%s)"
+  if [[ -f "$SEEN_FILE" ]]; then
+    last="$(awk -F"\t" -v k="$key" '$2==k{print $1}' "$SEEN_FILE" | tail -n1)"
+    if [[ -n "$last" ]] && (( now - last < COOLDOWN_SECONDS )); then
+      return 1   # still in cooldown → suppress
+    fi
+  fi
+  # Record/refresh this key: drop any old line for it, prune expired, append fresh.
+  local tmp="$SEEN_FILE.tmp.$$"
+  if [[ -f "$SEEN_FILE" ]]; then
+    awk -F"\t" -v k="$key" -v now="$now" -v cd="$COOLDOWN_SECONDS" \
+      '$2!=k && (now-$1)<cd' "$SEEN_FILE" > "$tmp" 2>/dev/null || : > "$tmp"
+  else
+    : > "$tmp"
+  fi
+  printf '%s\t%s\n' "$now" "$key" >> "$tmp"
+  mv "$tmp" "$SEEN_FILE"
+  return 0   # capture
+}
+
 flusher &
 FLUSHER_PID=$!
 
@@ -132,8 +170,17 @@ while true; do
   stream_start="$(date +%s)"
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    printf '%s\n' "$line" >> "$EVENTS_FILE"
-    touch "$ALIVE_FILE"
+    touch "$ALIVE_FILE"   # liveness: we are receiving stream data, captured or not
+    # Build the per-issue dedup key and suppress repeats within the cooldown so a
+    # single ongoing problem is triaged once, not once per event .count tick.
+    key="$(printf '%s' "$line" | jq -r '[(.ns//"-"),(.kind//"-"),(.name//"-"),(.reason//"-")]|join("/")' 2>/dev/null)"
+    if [[ -z "$key" ]]; then
+      printf '%s\n' "$line" >> "$EVENTS_FILE"   # unparseable → do not silently drop
+    elif should_capture "$key"; then
+      printf '%s\n' "$line" >> "$EVENTS_FILE"
+    else
+      echo "$LOG_PREFIX suppressed (cooldown): $key" >&2
+    fi
   done < <(
     kubectl get events "${SCOPE_ARGS[@]}" \
       --watch-only \
