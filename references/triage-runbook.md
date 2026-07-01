@@ -187,8 +187,9 @@ Desktop (with a "download Lens" fallback if it isn't installed).
 1. Build the inner `lens://` URL — it MUST start with `lens://app/open/` (the launcher rejects
    anything else):
    ```
-   lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
+   lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster<LIST_APIBASE>?kube-details=<URL_ENCODED_SELFLINK>
    ```
+   (`<LIST_APIBASE>` starts with `/api…`, so there's no extra slash after `cluster`.)
 2. Wrap it in the launcher, URL-encoding the **whole** inner URL once:
    ```
    https://app.k8slens.dev/lens-launcher?c=<encodeURIComponent(inner lens:// URL)>
@@ -204,20 +205,34 @@ clickable): `- **Pod `demo/web-1`** — [Open in Lens](https://app.k8slens.dev/l
 > user's Lens uses>)[:32]` for a `direct` cluster, or the cluster's `metadata.id` with
 > `LENS_CONNECTION_TYPE=teamwork`. The cluster must already exist in the user's Lens catalog.
 
-**RESOURCE_TAB** — the resource's plural: `pods`, `deployments`, `replicasets`,
-`statefulsets`, `daemonsets`, `jobs`, `services`, `nodes`, `persistentvolumeclaims`, …
+**⚠️ Two DIFFERENT path forms in one URL — this is the #1 mistake:**
 
-**kube-details** — the URL-encoded API path of the object (`.metadata.selfLink` is gone in
-modern k8s, so build it):
-- **core/v1** (Pod, Service, ConfigMap, Endpoints, PVC, Event): namespaced →
-  `/api/v1/namespaces/<ns>/<plural>/<name>`; cluster-scoped (Node) → `/api/v1/<plural>/<name>`.
-- **grouped** (Deployment/ReplicaSet/StatefulSet/DaemonSet → `apps/v1`; Job/CronJob → `batch/v1`;
-  Ingress → `networking.k8s.io/v1`): `/apis/<group>/<version>/namespaces/<ns>/<plural>/<name>`.
-- (Unsure of the group/plural? `kubectl api-resources`.)
+**`<LIST_APIBASE>`** selects the list tab and is the kind's **version-LESS `apiBase`** (NOT the
+bare plural, NOT the versioned selfLink). Lens matches this string exactly against its
+built-in resource names, so it must be:
+- **core** (Pod, Service, ConfigMap, Secret, PVC, Node, Event…): `/api/<plural>` — e.g.
+  `/api/pods`, `/api/services`, `/api/nodes`, `/api/persistentvolumeclaims`.
+- **grouped** (drop the version): `/apis/<group>/<plural>` — e.g. `/apis/apps/deployments`,
+  `/apis/apps/replicasets`, `/apis/apps/statefulsets`, `/apis/apps/daemonsets`,
+  `/apis/batch/jobs`, `/apis/batch/cronjobs`.
 
-**Example** — Pod `demo/broken-init-66657df94f-gdh77`, specifier `36e0cf76…`:
-- inner: `lens://app/open/direct/36e0cf76e1856f448c7378f7fd27f711/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdemo%2Fpods%2Fbroken-init-66657df94f-gdh77`
-- link: `[Open in Lens](https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2Fdirect%2F36e0cf76e1856f448c7378f7fd27f711%2Fcluster%2Fpods%3Fkube-details%3D%252Fapi%252Fv1%252Fnamespaces%252Fdemo%252Fpods%252Fbroken-init-66657df94f-gdh77)`
+  A bare plural like `/deployments` is WRONG — it resolves to `/api/deployments`, which matches
+  nothing → the list renders empty (even though the details panel still opens).
+
+**`kube-details`** is the object's **FULL versioned selfLink** (`.metadata.selfLink` is gone in
+modern k8s, so build it), URL-encoded:
+- **core/v1**: namespaced → `/api/v1/namespaces/<ns>/<plural>/<name>`; cluster-scoped (Node) →
+  `/api/v1/<plural>/<name>`.
+- **grouped**: `/apis/<group>/<version>/namespaces/<ns>/<plural>/<name>` (e.g.
+  `/apis/apps/v1/namespaces/<ns>/deployments/<name>`).
+- (Unsure of group/plural/version? `kubectl api-resources`.)
+
+So for a Deployment: `LIST_APIBASE=/apis/apps/deployments` (no version) but
+`kube-details=/apis/apps/v1/namespaces/<ns>/deployments/<name>` (with version).
+
+**Example** — Deployment `demo/broken-config`, specifier `36e0cf76…`:
+- inner: `lens://app/open/direct/36e0cf76e1856f448c7378f7fd27f711/cluster/apis/apps/deployments?kube-details=%2Fapis%2Fapps%2Fv1%2Fnamespaces%2Fdemo%2Fdeployments%2Fbroken-config`
+- link: `[Open in Lens](https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2Fdirect%2F36e0cf76e1856f448c7378f7fd27f711%2Fcluster%2Fapis%2Fapps%2Fdeployments%3Fkube-details%3D%252Fapis%252Fapps%252Fv1%252Fnamespaces%252Fdemo%252Fdeployments%252Fbroken-config)`
 
 ---
 
