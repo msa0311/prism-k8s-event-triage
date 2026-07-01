@@ -34,7 +34,7 @@ appear, so there are no empty/"all clear" runs, and the heartbeat is never touch
 ## Install
 
 ```bash
-npx skills add github:lensapp/prism-k8s-event-triage -g -a claude-code --copy
+npx skills add github:msa0311/prism-k8s-event-triage -g -a claude-code --copy
 ```
 
 …or drop this bundle into the agent's `<DATA>/skills/` directory. The catalog

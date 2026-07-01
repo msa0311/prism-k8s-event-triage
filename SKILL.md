@@ -138,7 +138,7 @@ where this `SKILL.md` was loaded from (`find / -name k8s-event-watcher.sh 2>/dev
 
 ## Setup (one-time)
 
-1. **Install the skill:** `npx skills add github:lensapp/prism-k8s-event-triage -g -a claude-code --copy`,
+1. **Install the skill:** `npx skills add github:msa0311/prism-k8s-event-triage -g -a claude-code --copy`,
    or drop this bundle into `<DATA>/skills/`.
 2. **Verify cluster access:** `kubectl get events -A --request-timeout=5s`. If it fails, the
    kubeconfig is missing/invalid — report that and stop (don't spawn a blind watcher).
