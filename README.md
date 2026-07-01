@@ -74,7 +74,7 @@ keep-alive task, heartbeat watchdog, or in-cluster Deployment).
 | `K8S_WATCHER_DEBOUNCE_SECONDS` | `15` | Minimum gap between scheduled triage tasks (coalesces event bursts). |
 | `K8S_WATCHER_NAMESPACE` | _(all)_ | Scope the watch to a single namespace. |
 | `K8S_WATCHER_TASK_NAME` | `k8s-event-triage` | Name used for the scheduled triage task. |
-| `LENS_CLUSTER_SPECIFIER` | _(compute from kubeconfig)_ | Pins the cluster specifier for `lens://` deep links, passed into the triage task. **Set this when the agent reaches the cluster via a tunnel** (its kubeconfig server URL differs from the user's local Lens, so a computed hash won't match). Value = `sha256(<server URL the user's Lens uses>)[:32]`. |
+| `LENS_CLUSTER_SPECIFIER` | _(none → "Open in Lens" links omitted)_ | Cluster specifier for the **"Open in Lens"** web-launcher links (`https://app.k8slens.dev/lens-launcher?c=…`) added to triage reports. **Required for links** — unset ⇒ links are omitted (the agent won't compute one, since a tunneled kubeconfig's server URL won't match the user's Lens). Value = `sha256(<server URL the user's Lens uses>)[:32]` for a `direct` cluster. |
 | `LENS_CONNECTION_TYPE` | `direct` | `direct` (kubeconfig cluster) or `teamwork` (Lens Spaces). |
 
 ## License

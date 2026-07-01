@@ -162,53 +162,62 @@ Per distinct issue, keep it tight:
 - **Root cause:** hypothesis + confidence; cite the evidence (log line, describe field).
 - **Suggested action:** immediate mitigation + durable fix; flag anything needing approval.
 - **Watch / escalate:** what to monitor and the threshold for paging a human.
-- **Open in Lens:** *(only when a cluster specifier was provided — see "Deep links" below)* a
-  `lens://` deep link to the resource; link the failing object and, when useful, its owning
-  workload. Omit this line entirely if no specifier is available.
+- **Open in Lens:** *(only when a cluster specifier was provided — see "Deep links" below)* an
+  https web-launcher link (Markdown link, not code) to the resource; link the failing object
+  and, when useful, its owning workload. Omit this line entirely if no specifier is available.
 
 Lead with the highest severity. Collapse repeats. Don't dump raw event lines or full logs —
 quote only the decisive snippet.
 
 ---
 
-## Deep links to Lens Desktop (`lens://`)
+## Deep links to Lens Desktop (via the web launcher)
 
-Add a `lens://` link to each resource **only when your task instruction gives you a cluster
-specifier**. If it does not, **omit `lens://` links entirely** — do not compute one and do not
-emit a partial/list link. The agent's kubeconfig server URL often differs from the user's Lens
-(e.g. behind a tunnel), so a self-computed hash would open Lens but fail to resolve the
-cluster; a wrong link is worse than none. Format:
+Add an **Open in Lens** link to each resource **only when your task instruction gives you a
+cluster specifier**. If it does not, **omit the link** — a wrong link is worse than none (the
+agent's kubeconfig server URL often differs from the user's Lens behind a tunnel).
 
-```
-lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
-```
+**Emit the `https://` web-launcher URL, NOT a raw `lens://` URL.** A raw `lens://` link is not
+clickable in Slack (custom schemes aren't linkified) and is stripped by the web UI's markdown
+sanitizer. The launcher is `https://`, so it's clickable everywhere and hands off to Lens
+Desktop (with a "download Lens" fallback if it isn't installed).
+
+**Build it in two steps:**
+
+1. Build the inner `lens://` URL — it MUST start with `lens://app/open/` (the launcher rejects
+   anything else):
+   ```
+   lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster/<RESOURCE_TAB>?kube-details=<URL_ENCODED_API_PATH>
+   ```
+2. Wrap it in the launcher, URL-encoding the **whole** inner URL once:
+   ```
+   https://app.k8slens.dev/lens-launcher?c=<encodeURIComponent(inner lens:// URL)>
+   ```
+
+**Render it as a Markdown link — never in backticks or a code block** (code spans aren't
+clickable): `- **Pod `demo/web-1`** — [Open in Lens](https://app.k8slens.dev/lens-launcher?c=…)`
 
 **CLUSTER_SPECIFIER / CONNECTION_TYPE** — use exactly what your instruction provides
 (`clusterSpecifier=…`, `connectionType=…`); never recompute or guess.
 
-> Operator note (not the agent's job): the value to configure in `LENS_CLUSTER_SPECIFIER` is
-> `sha256(<the server URL the user's Lens uses>)[:32]` for a `direct` cluster, or the cluster's
-> `metadata.id` with `LENS_CONNECTION_TYPE=teamwork` for a Lens Spaces cluster. The cluster must
-> already exist in the user's Lens catalog.
+> Operator note (not the agent's job): `LENS_CLUSTER_SPECIFIER` = `sha256(<the server URL the
+> user's Lens uses>)[:32]` for a `direct` cluster, or the cluster's `metadata.id` with
+> `LENS_CONNECTION_TYPE=teamwork`. The cluster must already exist in the user's Lens catalog.
 
 **RESOURCE_TAB** — the resource's plural: `pods`, `deployments`, `replicasets`,
 `statefulsets`, `daemonsets`, `jobs`, `services`, `nodes`, `persistentvolumeclaims`, …
 
-**kube-details** — the URL-encoded API path of the specific object (`.metadata.selfLink` is
-gone in modern k8s, so build it):
+**kube-details** — the URL-encoded API path of the object (`.metadata.selfLink` is gone in
+modern k8s, so build it):
 - **core/v1** (Pod, Service, ConfigMap, Endpoints, PVC, Event): namespaced →
-  `/api/v1/namespaces/<ns>/<plural>/<name>`; cluster-scoped (e.g. Node) → `/api/v1/<plural>/<name>`.
-- **grouped** (Deployment/ReplicaSet/StatefulSet/DaemonSet → `apps/v1`; Job/CronJob →
-  `batch/v1`; Ingress → `networking.k8s.io/v1`): `/apis/<group>/<version>/namespaces/<ns>/<plural>/<name>`.
-- URL-encode it — every `/` becomes `%2F`. (Unsure of the group/plural? `kubectl api-resources`.)
+  `/api/v1/namespaces/<ns>/<plural>/<name>`; cluster-scoped (Node) → `/api/v1/<plural>/<name>`.
+- **grouped** (Deployment/ReplicaSet/StatefulSet/DaemonSet → `apps/v1`; Job/CronJob → `batch/v1`;
+  Ingress → `networking.k8s.io/v1`): `/apis/<group>/<version>/namespaces/<ns>/<plural>/<name>`.
+- (Unsure of the group/plural? `kubectl api-resources`.)
 
-**Examples:**
-- Pod: `lens://app/open/direct/<SPEC>/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdefault%2Fpods%2Fweb-1`
-- Deployment: `lens://app/open/direct/<SPEC>/cluster/deployments?kube-details=%2Fapis%2Fapps%2Fv1%2Fnamespaces%2Fdefault%2Fdeployments%2Fweb`
-- Fallback (open the list only, no details): `lens://app/open/direct/<SPEC>/cluster/pods`
-
-Render as a markdown link in the report, e.g.
-`Pod \`default/web-1\` — [open in Lens](lens://app/open/direct/<SPEC>/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdefault%2Fpods%2Fweb-1)`.
+**Example** — Pod `demo/broken-init-66657df94f-gdh77`, specifier `36e0cf76…`:
+- inner: `lens://app/open/direct/36e0cf76e1856f448c7378f7fd27f711/cluster/pods?kube-details=%2Fapi%2Fv1%2Fnamespaces%2Fdemo%2Fpods%2Fbroken-init-66657df94f-gdh77`
+- link: `[Open in Lens](https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2Fdirect%2F36e0cf76e1856f448c7378f7fd27f711%2Fcluster%2Fpods%3Fkube-details%3D%252Fapi%252Fv1%252Fnamespaces%252Fdemo%252Fpods%252Fbroken-init-66657df94f-gdh77)`
 
 ---
 

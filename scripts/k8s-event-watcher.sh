@@ -94,7 +94,7 @@ schedule_triage_for() {
   local batch="$1"
   local instruction payload code lens_hint=""
   if [[ -n "$LENS_CLUSTER_SPECIFIER" ]]; then
-    lens_hint=" Also add a lens:// deep link per cited resource (per the skill's 'Deep links' section), using connectionType=${LENS_CONNECTION_TYPE} and clusterSpecifier=${LENS_CLUSTER_SPECIFIER} EXACTLY — do NOT compute the specifier from kubectl (this cluster is reached via a tunnel, so its kubeconfig server URL differs from the user's Lens)."
+    lens_hint=" Also add an 'Open in Lens' link per cited resource (per the skill's 'Deep links' section): build the https web-launcher URL https://app.k8slens.dev/lens-launcher?c=<URL-encoded lens:// URL> and render it as a Markdown link, NOT in backticks/code. Use connectionType=${LENS_CONNECTION_TYPE} and clusterSpecifier=${LENS_CLUSTER_SPECIFIER} EXACTLY — do NOT compute the specifier from kubectl (this cluster is reached via a tunnel)."
   else
     lens_hint=" Do NOT add lens:// deep links — no cluster specifier is configured, and a computed one would not match the user's Lens."
   fi

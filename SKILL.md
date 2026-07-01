@@ -75,9 +75,10 @@ claude_code({
     Do NOT run any mutating command (delete/scale/rollout/edit/apply/drain/patch).
     Return a concise report: what is failing, where (namespace/object), severity, the
     root-cause hypothesis with evidence, and the suggested fix (as a command to PROPOSE,
-    not run). If (and only if) your instruction provides a cluster specifier, add a lens://
-    deep link per cited resource using it exactly (runbook's 'Deep links' section); if no
-    specifier was provided, do NOT add lens:// links."
+    not run). If (and only if) your instruction provides a cluster specifier, add an 'Open in
+    Lens' link per cited resource — build the https web-launcher URL and render it as a Markdown
+    link, never raw lens:// and never in code (runbook's 'Deep links' section); if no specifier
+    was provided, omit the links."
 })
 ```
 
