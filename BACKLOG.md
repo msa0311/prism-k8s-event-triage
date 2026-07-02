@@ -4,41 +4,25 @@ Tracked improvements not yet scheduled. Promote entries to GitHub Issues when pi
 
 ---
 
-## Watcher: detect & notify on recovery during dedup cooldown window
+## Recovery / "resolved" notifications
 
-**Status:** open · filed 2026-07-01 · not urgent (team decision: "improve later")
+**Status:** open · not urgent
 **Labels:** enhancement
-**Related:** `scripts/k8s-event-watcher.sh` (`should_capture()`, `seen.tsv`), commit 0687e51
+**Related:** `references/in-cluster-setup.md` (Alertmanager `webhook_configs.send_resolved`)
 
-### Problem
+The setup uses `send_resolved: false`, so the agent triages firing alerts but never posts closure
+when an issue clears. Alertmanager already tracks resolution and can POST `status: "resolved"` when
+an alert stops firing. Enable `send_resolved: true` and have the `k8s-alerts` subscription/triage
+emit a brief "✅ recovered: <workload>" on resolved payloads (skip full triage for those). Gives
+closure with zero polling — the dedup/resolution is entirely Alertmanager's job.
 
-The per-issue dedup cooldown (`K8S_WATCHER_COOLDOWN_SECONDS`, default 6h; introduced in 0687e51)
-suppresses repeat Warnings for the same `ns/kind/name/reason` key. This correctly stops
-one-triage-per-`.count`-tick noise, but it has **no recovery detection**:
+## Agent/project-scoped Nexus API tokens (security hardening)
 
-- The watcher only streams `type=Warning` events. Recovery is signalled by *Normal* events
-  (`Started`, `Pulled`, `Available`, ...), which we filter out.
-- The **absence** of new Warnings is not an event, so nothing ever fires to say "it stopped failing."
+**Status:** open · security
+**Related:** the Bearer key used by the in-cluster sender
 
-### Consequences
-
-1. **No closure** - if a workload recovers during the cooldown window, the user gets silence.
-   No "recovered" notification; the `seen.tsv` key just sits until it expires or a fresh Warning re-arms it.
-2. **Swallowed re-break (the real gap)** - if a workload recovers and then breaks *again within the
-   same 6h window*, the re-break is **suppressed**, because the key is still in cooldown. The dedup
-   only knows "have I seen this key recently," not "is this still broken."
-
-### Options considered (rough effort order)
-
-1. **Resolution check at cooldown expiry** *(recommended)* - when a suppressed key's cooldown lapses,
-   query the object's current live state before re-triaging. Healthy -> emit a one-line "recovered"
-   and clear the key; still bad -> refresh triage. Cheap, gives closure, no polling loop, no wider event stream.
-2. **Watch Normal events too** for flagged objects and clear/notify on `Started`/`Available`.
-   More real-time, but more stream volume and more logic.
-3. **Active reconciler** - periodic loop re-checking every open key's live status.
-   Most accurate, most moving parts.
-
-### Recommendation
-
-Implement **Option 1**. It closes the loop and fixes the "recovered-then-rebroke-during-cooldown
-gets swallowed" gap without a polling loop or a wider event stream.
+Today the sender authenticates with an **org-scoped** Nexus API token, which can reach every agent
+in the org and the whole agent API — over-broad for a webhook poster. Nexus gap to close: add an
+optional `projectId`/`sandboxId` scope to `api_tokens` and enforce it in the authz check, then issue
+a token scoped to just this agent. (Alternative: a public `/agents/webhooks/*` path + a
+per-subscription secret, if unauthenticated senders are ever needed.)

@@ -1,81 +1,74 @@
 # prism-k8s-event-triage
 
-A [Prism](https://github.com/lensapp) Agent Skill that makes the agent **triage
-Kubernetes Warning/error events immediately as they appear** — no webhook
-infrastructure required.
+A [Prism](https://github.com/lensapp) Agent Skill that makes the agent **triage Kubernetes
+problems in real time**, driven by **standard, off-the-shelf in-cluster alerting** — no custom
+watcher, no in-sandbox daemon.
 
 ## How it works
 
-Kubernetes does not POST webhooks for Event objects, but it exposes a native
-streaming `watch` API. This skill uses it — and drives triage through dedicated
-one-shot tasks, **not the heartbeat**:
+A Kubernetes-supervised alerter in the user's cluster detects problems and POSTs them to this
+agent's webhook; the agent investigates and reports. Kubernetes supervises the sender, and
+**deduplication is handled off-the-shelf** (Alertmanager), so there's no fragile daemon and no
+alert spam.
 
 ```
-kubectl watch (type=Warning) ──append──► /data/k8s-watcher/events.jsonl
-        │ (debounced)                                  │ read when the task runs
-        └─ POST /agents/cron-tasks  (run-now one-shot) ─► triage task ─► triage ─► user
+User's cluster                                             Prism (this agent)
+──────────────                                             ──────────────────
+kube-state-metrics ─► Prometheus ─► Alertmanager ─POST(Bearer)─► POST /agents/webhooks/k8s-alerts
+  (± kubernetes-event-exporter for raw Warning events)             │ subscription prompt template
+                     dedup / group / silence here                  ▼ agent triages via Claude Code
+                                                                     (read-only) + the runbook
+                                                                     ─► "Open in Lens" link
+                                                                     ─► deliver to Slack
 ```
 
-- A lightweight background **watcher** (`scripts/k8s-event-watcher.sh`, spawned by
-  the agent via `shell_spawn`) streams `Warning` events and appends each to a logfile
-  on the persistent `/data` volume.
-- A flusher checks the logfile every ~15s and, **only if it has content**, renames it to a
-  unique batch file and **schedules a one-shot triage task** for that batch via the runtime's
-  cron API (`POST /agents/cron-tasks`, `schedule:"in 1 minute"` — the runtime rejects
-  sub-minute one-shots). No content ⇒ no task, so there are no empty runs.
-- When the task fires, the agent (driven by `SKILL.md`) delegates the investigation to the
-  **`claude_code`** tool (plan/read-only mode), which reads the batch, follows the triage
-  runbook, and returns a report (root cause, severity, suggested fix). The one-shot task
-  then auto-deletes.
+- **Primary trigger — Alertmanager** (via `kube-prometheus-stack` + `kube-state-metrics`, which ship
+  the rules: `KubePodCrashLooping`, `KubePodNotReady`, image-pull, OOM, HPA, node pressure, …). Its
+  `group_by` / `repeat_interval` / inhibition / silences **are the deduplication**.
+- **Optional — `kubernetes-event-exporter`** for raw Warning *events* not backed by metrics
+  (FailedMount/FailedScheduling, Flux/ArgoCD controller events). Dedup there is only k8s event
+  `count` aggregation, so prefer Alertmanager for anything you want deduped.
+- **Auth** — the webhook stays private; the in-cluster sender authenticates with a **Nexus API key**
+  (Bearer), reusing the existing edge auth. No public endpoint, no per-subscription secret.
 
-Triage is **event-driven and near-real-time** (~1 min): a task is scheduled only when real events
-appear, so there are no empty/"all clear" runs, and the heartbeat is never touched.
+Because the trigger lives in the cluster (not the sandbox), a runtime/sandbox restart never breaks
+triage — there's nothing to keep alive.
 
 ## Install
 
 ```bash
 npx skills add github:msa0311/prism-k8s-event-triage -g -a claude-code --copy
 ```
+…or drop this bundle into the agent's `<DATA>/skills/` directory (refreshes on mtime, no restart).
 
-…or drop this bundle into the agent's `<DATA>/skills/` directory. The catalog
-refreshes on directory mtime, so the skill appears without a restart.
-
-Then verify cluster access and spawn the watcher (the agent does this by following
-`SKILL.md`): `kubectl get events -A --request-timeout=5s` must work, then the watcher is
-started via `shell_spawn`. From then on, every Warning event schedules a triage task.
-
-The skill **does not use or change the agent's heartbeat.** Triage runs on dedicated
-one-shot cron tasks the watcher schedules on demand. To keep the watcher alive across
-container restarts, see the "Keeping the watcher alive" options in `SKILL.md` (recurring
-keep-alive task, heartbeat watchdog, or in-cluster Deployment).
+Then follow **`SKILL.md` → Part B (Setup)**: the agent creates the `k8s-alerts` webhook subscription
+and reports its URL; an operator mints a Nexus API key; the agent generates the Alertmanager /
+event-exporter manifests (`references/in-cluster-setup.md`) and the **user applies them** (the agent's
+kubectl is read-only).
 
 ## Requirements
 
-- A kubeconfig + `kubectl` in the sandbox with cluster access — the watcher runs as a
-  plain background process and uses ordinary `kubectl`. The skill verifies access on each
-  run and reports clearly if the kubeconfig is missing or the API server is unreachable.
-- `jq` and `curl` (present in the agent-runtime container).
+- An in-cluster alerter: **Prometheus + Alertmanager** (`kube-prometheus-stack`, one Helm install) for
+  the primary path, or **`kubernetes-event-exporter`** for raw events.
+- A **Nexus API key** (org-scoped) for the sender's Bearer auth. ⚠️ It reaches the whole agent API for
+  the org — store it in a Kubernetes `Secret`; agent/project-scoped tokens are future hardening.
+- The agent's read-only `kubectl` access to the monitored cluster (for triage investigation).
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | The agent-facing playbook (verify access, supervise the watcher, read events, triage). |
-| `references/triage-runbook.md` | Comprehensive triage reference: method, severity rubric, per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled, FailedScheduling, FailedMount, probe failures, quota, node pressure, HPA, …), output format, safety rules. Loaded on demand. |
-| `scripts/k8s-event-watcher.sh` | The background watcher: streams Warning events, appends them to the logfile, and debounced-schedules a one-shot triage task via the cron API; self-reconnecting. |
+| `SKILL.md` | The agent-facing playbook: Part A (triage a `k8s-alerts` webhook run via Claude Code) + Part B (one-time setup). |
+| `references/in-cluster-setup.md` | The in-cluster manifests/config: webhook subscription, token Secret, Alertmanager receiver/route, optional event-exporter Deployment/RBAC. |
+| `references/triage-runbook.md` | Triage method, severity rubric, per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled, FailedScheduling, FailedMount, probe failures, quota, node pressure, HPA, …), output format, safety rails, and the `lens://` launcher-link format. |
 
-## Configuration (watcher env, all optional)
+## Configuration
 
-| Env var | Default | Purpose |
-|---------|---------|---------|
-| `K8S_WATCHER_STATE_DIR` | `/data/k8s-watcher` | Where the logfile / pidfile live. |
-| `K8S_WATCHER_KUBECONFIG` | _(ambient `KUBECONFIG`)_ | Explicit kubeconfig path. Set this if `kubectl` in the watcher's process hits `localhost:8080` — a spawned process doesn't inherit an interactive shell's un-exported `KUBECONFIG` or `kubectl` aliases. |
-| `K8S_WATCHER_CRON_URL` | `http://localhost:3003/agents/cron-tasks` | Runtime cron API used to schedule the one-shot triage task. |
-| `K8S_WATCHER_DEBOUNCE_SECONDS` | `15` | Minimum gap between scheduled triage tasks (coalesces event bursts). |
-| `K8S_WATCHER_NAMESPACE` | _(all)_ | Scope the watch to a single namespace. |
-| `K8S_WATCHER_TASK_NAME` | `k8s-event-triage` | Name used for the scheduled triage task. |
-| `LENS_CLUSTER_SPECIFIER` | _(none → "Open in Lens" links omitted)_ | Cluster specifier for the **"Open in Lens"** web-launcher links (`https://app.k8slens.dev/lens-launcher?c=…`) added to triage reports. **Required for links** — unset ⇒ links are omitted (the agent won't compute one, since a tunneled kubeconfig's server URL won't match the user's Lens). Value = `sha256(<server URL the user's Lens uses>)[:32]` for a `direct` cluster. |
-| `LENS_CONNECTION_TYPE` | `direct` | `direct` (kubeconfig cluster) or `teamwork` (Lens Spaces). |
+The webhook subscription is named **`k8s-alerts`** (`deliverTo: slack`/`all`). The in-cluster sender
+posts to `https://<sandbox-slug>.<SANDBOX_INGRESS_HOST>/agents/webhooks/k8s-alerts` with
+`Authorization: Bearer <nexus-api-key>`. Alertmanager dedup knobs (`group_by`, `repeat_interval`, …)
+and the optional Lens cluster specifier for launcher links are covered in
+`references/in-cluster-setup.md`.
 
 ## License
 
