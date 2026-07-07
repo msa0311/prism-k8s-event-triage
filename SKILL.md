@@ -57,14 +57,19 @@ raw payload: `{"alerts":[{"labels":{"alertname","namespace","pod"/workload,…},
 ```
 claude_code({
   mode: "plan",
-  prompt: "Triage a Kubernetes incident. Firing alerts: <PASTE the parsed alerts: namespace/kind/name/reason/summary>.
-    Follow the k8s-event-triage skill's references/triage-runbook.md: scope the blast radius and
-    investigate root cause with READ-ONLY kubectl (describe / logs --previous / get events / top /
-    node conditions). Do NOT run any mutating command (delete/scale/rollout/edit/apply/drain/patch).
-    Return a concise report per the runbook format: what's failing, where, severity, root-cause
-    hypothesis with evidence, and the suggested fix as a command to PROPOSE (not run). Add an
-    'Open in Lens' web-launcher link per cited resource per the runbook's 'Deep links' section
-    (Markdown link, never raw lens:// / never in code) IF a cluster specifier is available; else omit."
+  prompt: "Triage a Kubernetes incident. Firing alerts: <PASTE the parsed alerts: namespace/kind/name/reason/summary + startsAt>.
+    Follow the k8s-event-triage skill's references/triage-runbook.md with READ-ONLY kubectl: scope the
+    blast radius; gather evidence (describe / logs --previous / get events / top / node conditions); and
+    CHECK WHAT CHANGED recently (rollout history, current image, recent events, pod age) and correlate
+    it to the alert onset (startsAt) — if a GitHub tool is available, find the correlating commit/PR.
+    Do NOT run any mutating command (delete / scale / rollout restart|undo / edit / apply / drain /
+    patch); note that 'kubectl rollout history' is read-only and allowed.
+    Return a concise report per the runbook's Output format, INCLUDING an 'Investigation' trail (the
+    commands you ran → the decisive finding from each) and a 'Recent change' line (what changed + when
+    vs onset, or 'no recent change'), then root cause (citing the trail) + the suggested fix as a
+    command to PROPOSE (not run). Add an 'Open in Lens' web-launcher link per cited resource per the
+    runbook's 'Deep links' section (Markdown link, never raw lens:// / never in code) IF a cluster
+    specifier is available; else omit."
 })
 ```
 

@@ -17,10 +17,19 @@ are **read-only**; see [Safety](#safety) before doing anything mutating.
    cluster-wide? Scope drives severity far more than the raw event count.
 4. **Gather evidence** (commands below): `describe`, current + previous logs, recent events
    for the object, resource usage, node conditions.
-5. **Form a root-cause hypothesis** with a confidence level. Say what you're unsure about.
-6. **Recommend action**: an immediate mitigation *and* a durable fix. Separate "safe to do
+5. **Check what changed recently.** Correlate the incident with a recent rollout / deploy /
+   image / config change (commands below), comparing to the alert's onset time (`startsAt` in
+   the webhook payload). A brand-new revision or image right before onset is the prime suspect;
+   *"nothing changed"* is itself a finding (points at load/infra, not a deploy). If a GitHub
+   tool/MCP is available, map the changed image tag or GitOps commit to the correlating commit/PR.
+6. **Form a root-cause hypothesis** with a confidence level. Say what you're unsure about.
+7. **Recommend action**: an immediate mitigation *and* a durable fix. Separate "safe to do
    now" from "needs human approval."
-7. **State what to watch** and the escalation threshold.
+8. **State what to watch** and the escalation threshold.
+
+**Show your work.** The report must expose *how* you reached the conclusion — the specific commands
+you ran and the decisive finding from each (see [Output format](#output-format-for-the-triage-report)).
+A human has to be able to verify the reasoning before acting on it.
 
 ### Evidence-gathering commands
 
@@ -40,6 +49,22 @@ if a Prometheus query tool is available, series like `container_memory_working_s
 `kube_pod_container_status_restarts_total`, `kube_pod_status_phase` to confirm
 OOM/restart/pending patterns. If no metrics backend is reachable, rely on `kubectl
 describe` and logs.
+
+### Change-detection commands ("what changed recently")
+
+All read-only. Compare the timings to the alert's onset (`startsAt`) — a change right before onset
+is the likely trigger.
+
+```bash
+kubectl rollout history <deploy|statefulset|daemonset>/<name> -n <ns>           # revisions + when
+kubectl get <workload> <name> -n <ns> -o jsonpath='{.spec.template.spec.containers[*].image}'  # current image(s)
+kubectl get <workload> <name> -n <ns> -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}{"\n"}{.status.observedGeneration}'
+kubectl get events -n <ns> --sort-by=.lastTimestamp | tail -30                  # what happened around onset
+kubectl get pod <pod> -n <ns> -o jsonpath='{.metadata.creationTimestamp}'       # failing pod age vs onset
+```
+
+If a **GitHub tool/MCP** is available, map the changed image tag / GitOps commit to the correlating
+commit or PR (best-effort). If none is available, stick to the in-cluster signals above — don't guess.
 
 ---
 
@@ -159,7 +184,13 @@ Per distinct issue, keep it tight:
 
 - **What & where:** `<kind>/<name>` in `<ns>` — `<reason>` (×count, since `<ts>`).
 - **Severity:** Critical / High / Medium / Low (per the rubric).
-- **Root cause:** hypothesis + confidence; cite the evidence (log line, describe field).
+- **Investigation:** the trail — 2–5 lines of `command → decisive finding`, e.g.
+  `describe pod → Last State: OOMKilled (137)` · `logs --previous → java.lang.OutOfMemoryError`
+  · `rollout history → rev 7, 11m ago`. Decisive snippets only — never full logs/dumps.
+- **Recent change:** what changed and when, and whether it lines up with the alert's onset —
+  e.g. *"deploy rev 7 rolled out 11m ago, ~2m before onset"* — or *"no recent change (not
+  deploy-related)."* Include the correlating commit/PR only if a GitHub tool surfaced it.
+- **Root cause:** hypothesis + confidence, **citing the Investigation lines above**.
 - **Suggested action:** immediate mitigation + durable fix; flag anything needing approval.
 - **Watch / escalate:** what to monitor and the threshold for paging a human.
 - **Open in Lens:** *(only when a cluster specifier was provided — see "Deep links" below)* an
