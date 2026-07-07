@@ -22,7 +22,7 @@ alert spam.
 ```
 User's cluster                                             Prism (this agent)
 ──────────────                                             ──────────────────
-kube-state-metrics ─► Prometheus ─► Alertmanager ─POST(Bearer)─► POST /agents/webhooks/k8s-alerts
+kube-state-metrics ─► Prometheus ─► Alertmanager ────POST────► POST /agents/webhooks/k8s-alerts
   (± kubernetes-event-exporter for raw Warning events)             │ subscription prompt template
                      dedup / group / silence here                  ▼ agent run → triage via
                                                                      Claude Code + runbook
@@ -35,10 +35,12 @@ kube-state-metrics ─► Prometheus ─► Alertmanager ─POST(Bearer)─► P
   `group_by` / `repeat_interval` / inhibition / silences **are the deduplication**.
 - **Optional: `kubernetes-event-exporter`** for raw Warning *events* not backed by metrics
   (FailedMount/FailedScheduling, Flux/ArgoCD controller events).
-- **Auth:** the webhook stays private; the sender authenticates with a **Nexus API key** (Bearer).
+- **Webhook configuration is yours, not the skill's.** The skill makes no assumptions about how the
+  webhook endpoint is exposed, addressed, or authenticated — that depends on your Prism deployment.
+  You create the webhook once in Prism's **Web UI** and wire your Alertmanager to it (see Part B).
 
-Full in-cluster manifests/config are in **`references/in-cluster-setup.md`**; the triage method is in
-**`references/triage-runbook.md`**.
+Example Alertmanager / event-exporter config is in **`references/in-cluster-setup.md`**; the triage
+method is in **`references/triage-runbook.md`**.
 
 ---
 
@@ -82,34 +84,28 @@ format all live in `references/triage-runbook.md` — that's what Claude Code fo
 
 ---
 
-## Part B — Setup (one-time)
+## Part B — Setup (one-time, done by you)
 
-Goal: an in-cluster Alertmanager (or event-exporter) POSTing to this agent's webhook. See
-`references/in-cluster-setup.md` for the exact manifests; the steps:
+After installing the skill, one thing must be wired up before anything happens: **a webhook that
+your in-cluster alerting POSTs to**. The skill does not create or configure this — it's your
+webhook, in your Alertmanager, secured however your Prism deployment requires. Prism's **Web UI has
+a Webhooks page** for exactly this.
 
 1. **Install the skill:** `npx skills add github:msa0311/prism-k8s-event-triage -g -a claude-code --copy`,
    or drop this bundle into `<DATA>/skills/`.
-2. **Create the webhook subscription** (the agent does this): `POST /agents/webhook-subscriptions`
-   with `name: "k8s-alerts"`, `deliverTo: "slack"` (or `"all"`), and a **prompt template** that
-   embeds the raw payload and points at this skill — e.g.
+2. **Create the webhook in the Prism Web UI** (**Webhooks** page): enable webhooks, then create a
+   subscription named `k8s-alerts` with a **prompt template** that embeds the raw payload and points
+   at this skill — e.g.
    *"A Kubernetes alert fired: {__raw__}. Follow the k8s-event-triage skill (Part A) to triage it."*
-   Then enable the receiver (`PATCH /agents/webhooks/receiver` → enabled).
-3. **Report the webhook URL:** `https://<sandbox-slug>.<SANDBOX_INGRESS_HOST>/agents/webhooks/k8s-alerts`
-   (e.g. `…agents.lenshq.io/agents/webhooks/k8s-alerts`). The operator needs this for step 5.
-4. **Operator mints a Nexus API key** (org-scoped; UI / `nexusctl api-token create` / `create_api_token`
-   MCP). ⚠️ This key can reach the whole agent API for the org — treat it as a secret; store it in a
-   Kubernetes `Secret`, not inline.
-5. **Generate + apply the in-cluster config** (`references/in-cluster-setup.md`). The agent's kubectl
-   is **read-only**, so it *emits* the YAML and the **user applies it** (`kubectl apply` / GitOps):
-   - **Alertmanager** receiver + route (`webhook_configs` → the URL from step 3, `http_config` Bearer =
-     the API key via a Secret; `group_by: [namespace, alertname]`, `repeat_interval: 4h`). Install
-     `kube-prometheus-stack` first if the cluster has no Prometheus/Alertmanager.
-   - **Optional** `kubernetes-event-exporter` Deployment + RBAC + config for raw Warning events.
+   Copy the endpoint URL shown next to the subscription.
+3. **Point your Alertmanager (or `kubernetes-event-exporter`) at that URL.** How the endpoint is
+   reachable from the cluster and whether it needs auth headers depends on your Prism deployment —
+   that part is up to you. `references/in-cluster-setup.md` has example Alertmanager /
+   event-exporter config to start from.
 
 ## Notes & limits
 - **No in-sandbox component** — nothing to keep alive; a runtime/sandbox restart doesn't break triage.
 - **Dedup is upstream** (Alertmanager). `kubernetes-event-exporter` only has k8s event `count`
   aggregation, so prefer Alertmanager for anything you want deduped.
-- **The API key is org-broad** (interim); production wants agent/project-scoped tokens.
 - Requires the user to run Prometheus/Alertmanager for the primary path (event-exporter is the
-  lighter alternative), and to apply the in-cluster manifests themselves.
+  lighter alternative), and to set up the webhook + in-cluster config themselves (Part B).

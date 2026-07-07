@@ -18,11 +18,13 @@ closure with zero polling — the dedup/resolution is entirely Alertmanager's jo
 
 ## Agent/project-scoped Nexus API tokens (security hardening)
 
-**Status:** open · security
-**Related:** the Bearer key used by the in-cluster sender
+**Status:** open · security · out of this skill's scope (tracked here for context)
+**Related:** deployments that secure the webhook with a Nexus API token
 
-Today the sender authenticates with an **org-scoped** Nexus API token, which can reach every agent
-in the org and the whole agent API — over-broad for a webhook poster. Nexus gap to close: add an
-optional `projectId`/`sandboxId` scope to `api_tokens` and enforce it in the authz check, then issue
-a token scoped to just this agent. (Alternative: a public `/agents/webhooks/*` path + a
-per-subscription secret, if unauthenticated senders are ever needed.)
+The skill no longer prescribes how the webhook is authenticated — that's deployment-specific
+(see `SKILL.md` Part B). But deployments that front it with a Nexus API token today can only mint
+**org-scoped** tokens, which reach every agent in the org and the whole agent API — over-broad for
+a webhook poster. Nexus gap to close: add an optional `projectId`/`sandboxId` scope to `api_tokens`
+and enforce it in the authz check, then issue a token scoped to just one agent. (Alternative: a
+public `/agents/webhooks/*` path + a per-subscription secret, if unauthenticated senders are ever
+needed.)

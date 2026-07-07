@@ -14,7 +14,7 @@ alert spam.
 ```
 User's cluster                                             Prism (this agent)
 ──────────────                                             ──────────────────
-kube-state-metrics ─► Prometheus ─► Alertmanager ─POST(Bearer)─► POST /agents/webhooks/k8s-alerts
+kube-state-metrics ─► Prometheus ─► Alertmanager ────POST────► POST /agents/webhooks/k8s-alerts
   (± kubernetes-event-exporter for raw Warning events)             │ subscription prompt template
                      dedup / group / silence here                  ▼ agent triages via Claude Code
                                                                      (read-only) + the runbook
@@ -28,8 +28,9 @@ kube-state-metrics ─► Prometheus ─► Alertmanager ─POST(Bearer)─► P
 - **Optional — `kubernetes-event-exporter`** for raw Warning *events* not backed by metrics
   (FailedMount/FailedScheduling, Flux/ArgoCD controller events). Dedup there is only k8s event
   `count` aggregation, so prefer Alertmanager for anything you want deduped.
-- **Auth** — the webhook stays private; the in-cluster sender authenticates with a **Nexus API key**
-  (Bearer), reusing the existing edge auth. No public endpoint, no per-subscription secret.
+- **The webhook is yours to set up** — the skill makes no assumptions about how the endpoint is
+  exposed, addressed, or authenticated; that depends on your Prism deployment. You create it once in
+  Prism's **Web UI** (Webhooks page) and point your Alertmanager at it.
 
 Because the trigger lives in the cluster (not the sandbox), a runtime/sandbox restart never breaks
 triage — there's nothing to keep alive.
@@ -41,17 +42,19 @@ npx skills add github:msa0311/prism-k8s-event-triage -g -a claude-code --copy
 ```
 …or drop this bundle into the agent's `<DATA>/skills/` directory (refreshes on mtime, no restart).
 
-Then follow **`SKILL.md` → Part B (Setup)**: the agent creates the `k8s-alerts` webhook subscription
-and reports its URL; an operator mints a Nexus API key; the agent generates the Alertmanager /
-event-exporter manifests (`references/in-cluster-setup.md`) and the **user applies them** (the agent's
-kubectl is read-only).
+Then one **one-time setup** remains, done by you (see **`SKILL.md` → Part B**): create the
+`k8s-alerts` webhook in **Prism's Web UI** (Webhooks page — enable webhooks, add the subscription
+with its prompt template, copy the endpoint URL), then configure your **Alertmanager** (or
+event-exporter) to POST firing alerts to that URL. How the endpoint is exposed and authenticated
+depends on your Prism deployment and is up to you; `references/in-cluster-setup.md` has example
+config to start from.
 
 ## Requirements
 
 - An in-cluster alerter: **Prometheus + Alertmanager** (`kube-prometheus-stack`, one Helm install) for
   the primary path, or **`kubernetes-event-exporter`** for raw events.
-- A **Nexus API key** (org-scoped) for the sender's Bearer auth. ⚠️ It reaches the whole agent API for
-  the org — store it in a Kubernetes `Secret`; agent/project-scoped tokens are future hardening.
+- A webhook endpoint your cluster can reach — created in Prism's Web UI; exposure and auth are
+  deployment-specific and configured by you.
 - The agent's read-only `kubectl` access to the monitored cluster (for triage investigation).
 
 ## Files
@@ -59,15 +62,15 @@ kubectl is read-only).
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | The agent-facing playbook: Part A (triage a `k8s-alerts` webhook run via Claude Code) + Part B (one-time setup). |
-| `references/in-cluster-setup.md` | The in-cluster manifests/config: webhook subscription, token Secret, Alertmanager receiver/route, optional event-exporter Deployment/RBAC. |
+| `references/in-cluster-setup.md` | Example in-cluster config: subscription prompt template, Alertmanager receiver/route, optional event-exporter Deployment/RBAC. |
 | `references/triage-runbook.md` | Triage method, severity rubric, per-symptom playbook (CrashLoopBackOff, ImagePullBackOff, OOMKilled, FailedScheduling, FailedMount, probe failures, quota, node pressure, HPA, …), output format, safety rails, and the `lens://` launcher-link format. |
 
 ## Configuration
 
-The webhook subscription is named **`k8s-alerts`** (`deliverTo: slack`/`all`). The in-cluster sender
-posts to `https://<sandbox-slug>.<SANDBOX_INGRESS_HOST>/agents/webhooks/k8s-alerts` with
-`Authorization: Bearer <nexus-api-key>`. Alertmanager dedup knobs (`group_by`, `repeat_interval`, …)
-and the optional Lens cluster specifier for launcher links are covered in
+The webhook subscription is named **`k8s-alerts`** (delivery to Slack, chat, or all channels — your
+choice in the Web UI). The in-cluster sender POSTs to the subscription's endpoint URL, shown with a
+copy button on the Web UI's Webhooks page. Alertmanager dedup knobs (`group_by`, `repeat_interval`,
+…) and the optional Lens cluster specifier for launcher links are covered in
 `references/in-cluster-setup.md`.
 
 ## License
