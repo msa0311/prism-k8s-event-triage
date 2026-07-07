@@ -67,8 +67,10 @@ claude_code({
     Do NOT run any mutating command (delete / scale / rollout restart|undo / edit / apply / drain /
     patch); note that 'kubectl rollout history' is read-only and allowed.
     Return a concise report per the runbook's Output format, INCLUDING an 'Investigation' trail (the
-    commands you ran → the decisive finding from each) and a 'Recent change' line (what changed + when
-    vs onset, or 'no recent change'), then root cause (citing the trail) + the suggested fix as a
+    commands you ran → the decisive finding from each), a 'Recent change' line (what changed + when
+    vs onset, or 'no recent change'), and a 'Class:' line with ONE root-cause class keyword from
+    oom|crashloop|image-pull|scheduling|node-pressure|config|quota|network|app-error|unknown,
+    then root cause (citing the trail) + the suggested fix as a
     command to PROPOSE (not run). Add an 'Open in Lens' web-launcher link per cited resource per the
     runbook's 'Deep links' section (Markdown link, never raw lens:// / never in code) IF a cluster
     specifier is available; else omit."
@@ -78,6 +80,22 @@ claude_code({
    Then poll `claude_code_status({ taskId })` until `completed` and **deliver its `result`** as the
    triage report. Keep the read-only rule in the prompt — plan mode blocks file edits, not mutating
    `kubectl`.
+
+3. **Record the work (optional, one call).** After the triage report is delivered, if
+   `/data/skills/work-telemetry/` exists, follow that skill's "How to record work" section
+   ([prism-work-telemetry](https://github.com/msa0311/prism-work-telemetry)) with:
+   - `type: "k8s.triage"`, `trigger: "webhook"`
+   - `id`: `"<alertname>/<namespace>/<workload>"` — stable fingerprint, same problem ⇒ same id
+   - `severity`: the rubric result, lowercased (`critical|high|medium|low|info`)
+   - `category`: the report's `Class:` root-cause keyword
+   - `outcome`: `diagnosed` (root cause found, fix proposed) · `needs_human` (low confidence or
+     approval needed) · `recovered` (already self-healed) · `false_positive` (Low + cosmetic/
+     already resolved) · `escalated` (Critical, humans paged)
+   - `detected_at`: the alert's `startsAt`; `attrs`: `{"k8s.namespace": …, "alert.name": …}`
+   - omit `human_minutes_saved` to use the configured per-type default
+
+   If the work-telemetry skill is not installed, skip this step silently — never let recording
+   block, delay, or fail the triage itself.
 
 The method, severity rubric, per-symptom playbook, safety rails, and the `lens://` launcher-link
 format all live in `references/triage-runbook.md` — that's what Claude Code follows.
@@ -102,6 +120,10 @@ a Webhooks page** for exactly this.
    reachable from the cluster and whether it needs auth headers depends on your Prism deployment —
    that part is up to you. `references/in-cluster-setup.md` has example Alertmanager /
    event-exporter config to start from.
+4. **(Optional) Make the triage work measurable:** install
+   [prism-work-telemetry](https://github.com/msa0311/prism-work-telemetry) and configure its
+   collector endpoint — every triage then lands on the central agent-work dashboard
+   (e.g. [prism-work-dashboard](https://github.com/msa0311/prism-work-dashboard)).
 
 ## Notes & limits
 - **No in-sandbox component** — nothing to keep alive; a runtime/sandbox restart doesn't break triage.
@@ -109,3 +131,5 @@ a Webhooks page** for exactly this.
   aggregation, so prefer Alertmanager for anything you want deduped.
 - Requires the user to run Prometheus/Alertmanager for the primary path (event-exporter is the
   lighter alternative), and to set up the webhook + in-cluster config themselves (Part B).
+- **Work recording (Part A step 3) is best-effort** — it runs after the report is delivered and
+  never blocks or delays a triage; without the work-telemetry skill it's skipped entirely.

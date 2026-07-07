@@ -190,6 +190,9 @@ Per distinct issue, keep it tight:
 - **Recent change:** what changed and when, and whether it lines up with the alert's onset —
   e.g. *"deploy rev 7 rolled out 11m ago, ~2m before onset"* — or *"no recent change (not
   deploy-related)."* Include the correlating commit/PR only if a GitHub tool surfaced it.
+- **Class:** exactly one root-cause class keyword —
+  `oom | crashloop | image-pull | scheduling | node-pressure | config | quota | network | app-error | unknown`
+  (machine-readable: it becomes `work.category` in the triage's work-telemetry record).
 - **Root cause:** hypothesis + confidence, **citing the Investigation lines above**.
 - **Suggested action:** immediate mitigation + durable fix; flag anything needing approval.
 - **Watch / escalate:** what to monitor and the threshold for paging a human.
