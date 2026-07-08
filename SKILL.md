@@ -85,19 +85,15 @@ claude_code({
    Then poll `claude_code_status({ taskId })` until `completed`. Keep the read-only rule in the
    prompt — plan mode blocks file edits, not mutating `kubectl`.
 
-   **Your reply IS the delivery — paste the full report into it.** The `claude_code_status`
-   `result` is a tool output only you can see; nothing has been delivered until the report text
-   is in YOUR response message. Copy the complete report into your reply (after link
-   validation), and make it the substance of the reply. NEVER respond with only meta-commentary
-   like *"Report delivered and logged. Standing by."* — that message would be the only thing the
-   user ever sees, and there is no report anywhere else.
+   ⚠️ **ONLY YOUR FINAL RESPONSE IS DELIVERED.** In a webhook run, the user (Slack/chat) receives
+   exactly one message: the text you produce **after your last tool call**. Nothing you write
+   between tool calls is posted anywhere — "the report is above" is NEVER true for the user, and
+   the `claude_code_status` `result` is a tool output only you can see. Two real failures to
+   never repeat: a run whose only delivered message was *"Report delivered and logged. Standing
+   by."* and one that said *"Done. Triage delivered above."* — in both, the user received NO
+   report at all.
 
-   **Before replying, validate every Lens link**: it must start with
-   `https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2F` — anything else, rebuild it
-   per the runbook's Deep-links template or drop the link (a wrong link is worse than none).
-
-3. **Record the work (optional, one call).** Once the report is composed — ideally before you
-   send the reply, so the report stays your final message — if
+3. **Record the work (optional, one call) — BEFORE writing the report.** If
    `/data/skills/work-telemetry/` exists, follow that skill's "How to record work" section
    ([prism-work-telemetry](https://github.com/msa0311/prism-work-telemetry)) with:
    - `type: "k8s.triage"`, `trigger: "webhook"`
@@ -111,7 +107,19 @@ claude_code({
    - omit `human_minutes_saved` to use the configured per-type default
 
    If the work-telemetry skill is not installed, skip this step silently — never let recording
-   block, delay, or fail the triage itself.
+   block, delay, or fail the triage itself. Do any memory writes here too — **all tool calls
+   happen in this step, before the report.**
+
+4. **Deliver: write the full triage report as your final response — and stop.**
+   - Compose it from `claude_code`'s `result`, after **validating every Lens link**: each must
+     start with `https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2F` — anything
+     else, rebuild it per the runbook's Deep-links template or drop it (a wrong link is worse
+     than none).
+   - The report is the WHOLE message: no "Done", no "recorded", no "standing by", no summary of
+     what you did — lead with the triage content and end with it.
+   - **No tool calls after the report.** If you realize more tool work is needed after you
+     already wrote report text, do the tool calls and then **repeat the full report** as your
+     new final response — earlier text was not delivered.
 
 The method, severity rubric, per-symptom playbook, safety rails, and the `lens://` launcher-link
 format all live in `references/triage-runbook.md` — that's what Claude Code follows.
