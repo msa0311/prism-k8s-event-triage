@@ -218,12 +218,17 @@ Desktop (with a "download Lens" fallback if it isn't installed).
 
 **Build it in two steps:**
 
-1. Build the inner `lens://` URL — it MUST start with `lens://app/open/` (the launcher rejects
-   anything else):
+1. Build the inner `lens://` URL — it MUST start with `lens://app/open/`:
    ```
    lens://app/open/<CONNECTION_TYPE>/<CLUSTER_SPECIFIER>/cluster<LIST_APIBASE>?kube-details=<URL_ENCODED_SELFLINK>
    ```
    (`<LIST_APIBASE>` starts with `/api…`, so there's no extra slash after `cluster`.)
+
+   **Any other host/shape fails INSIDE Lens Desktop with `Error: invalid host`** — the launcher
+   page passes the URL through, so the failure only surfaces after the hand-off. In particular,
+   do NOT invent frontend-route-style URLs like
+   `lens://cluster/<hash>/workloads/deployment/<ns>/<name>` — that is Lens's internal SPA route,
+   not a protocol URL, and it does not route.
 2. Wrap it in the launcher, URL-encoding the **whole** inner URL once:
    ```
    https://app.k8slens.dev/lens-launcher?c=<encodeURIComponent(inner lens:// URL)>

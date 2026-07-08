@@ -71,15 +71,22 @@ claude_code({
     vs onset, or 'no recent change'), and a 'Class:' line with ONE root-cause class keyword from
     oom|crashloop|image-pull|scheduling|node-pressure|config|quota|network|app-error|unknown,
     then root cause (citing the trail) + the suggested fix as a
-    command to PROPOSE (not run). Add an 'Open in Lens' web-launcher link per cited resource per the
-    runbook's 'Deep links' section (Markdown link, never raw lens:// / never in code) IF a cluster
-    specifier is available; else omit."
+    command to PROPOSE (not run). IF a cluster specifier is available, add an 'Open in Lens' link
+    per cited resource as a Markdown link (never raw lens:// / never in code), built EXACTLY as:
+    https://app.k8slens.dev/lens-launcher?c=<encodeURIComponent of the inner lens:// URL>
+    where the inner URL is
+    lens://app/open/<connectionType>/<clusterSpecifier>/cluster<versionless apiBase, e.g. /apis/apps/deployments or /api/pods>?kube-details=<urlencoded FULL versioned selfLink, e.g. /apis/apps/v1/namespaces/<ns>/deployments/<name>>
+    The inner URL MUST begin with lens://app/open/ — any other shape (e.g.
+    lens://cluster/<hash>/workloads/...) fails in Lens Desktop with 'invalid host'. Details +
+    worked example: the runbook's 'Deep links' section. If no specifier: omit links entirely."
 })
 ```
 
    Then poll `claude_code_status({ taskId })` until `completed` and **deliver its `result`** as the
    triage report. Keep the read-only rule in the prompt — plan mode blocks file edits, not mutating
-   `kubectl`.
+   `kubectl`. **Before delivering, validate every Lens link**: it must start with
+   `https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2F` — anything else, rebuild it
+   per the runbook's Deep-links template or drop the link (a wrong link is worse than none).
 
 3. **Record the work (optional, one call).** After the triage report is delivered, if
    `/data/skills/work-telemetry/` exists, follow that skill's "How to record work" section
