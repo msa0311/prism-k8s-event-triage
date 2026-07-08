@@ -82,13 +82,22 @@ claude_code({
 })
 ```
 
-   Then poll `claude_code_status({ taskId })` until `completed` and **deliver its `result`** as the
-   triage report. Keep the read-only rule in the prompt — plan mode blocks file edits, not mutating
-   `kubectl`. **Before delivering, validate every Lens link**: it must start with
+   Then poll `claude_code_status({ taskId })` until `completed`. Keep the read-only rule in the
+   prompt — plan mode blocks file edits, not mutating `kubectl`.
+
+   **Your reply IS the delivery — paste the full report into it.** The `claude_code_status`
+   `result` is a tool output only you can see; nothing has been delivered until the report text
+   is in YOUR response message. Copy the complete report into your reply (after link
+   validation), and make it the substance of the reply. NEVER respond with only meta-commentary
+   like *"Report delivered and logged. Standing by."* — that message would be the only thing the
+   user ever sees, and there is no report anywhere else.
+
+   **Before replying, validate every Lens link**: it must start with
    `https://app.k8slens.dev/lens-launcher?c=lens%3A%2F%2Fapp%2Fopen%2F` — anything else, rebuild it
    per the runbook's Deep-links template or drop the link (a wrong link is worse than none).
 
-3. **Record the work (optional, one call).** After the triage report is delivered, if
+3. **Record the work (optional, one call).** Once the report is composed — ideally before you
+   send the reply, so the report stays your final message — if
    `/data/skills/work-telemetry/` exists, follow that skill's "How to record work" section
    ([prism-work-telemetry](https://github.com/msa0311/prism-work-telemetry)) with:
    - `type: "k8s.triage"`, `trigger: "webhook"`
@@ -138,5 +147,5 @@ a Webhooks page** for exactly this.
   aggregation, so prefer Alertmanager for anything you want deduped.
 - Requires the user to run Prometheus/Alertmanager for the primary path (event-exporter is the
   lighter alternative), and to set up the webhook + in-cluster config themselves (Part B).
-- **Work recording (Part A step 3) is best-effort** — it runs after the report is delivered and
-  never blocks or delays a triage; without the work-telemetry skill it's skipped entirely.
+- **Work recording (Part A step 3) is best-effort** — it must never block, delay, or replace
+  the triage report; without the work-telemetry skill it's skipped entirely.
