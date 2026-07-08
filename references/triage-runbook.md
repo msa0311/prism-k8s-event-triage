@@ -255,8 +255,11 @@ built-in resource names, so it must be:
   `/apis/apps/replicasets`, `/apis/apps/statefulsets`, `/apis/apps/daemonsets`,
   `/apis/batch/jobs`, `/apis/batch/cronjobs`.
 
-  A bare plural like `/deployments` is WRONG — it resolves to `/api/deployments`, which matches
-  nothing → the list renders empty (even though the details panel still opens).
+  A bare plural like `/deployments` is WRONG — Lens prefixes a tail that doesn't start with
+  `/api`, so it resolves to `/api/deployments`, which matches nothing → the list renders empty
+  (even though the details panel still opens). The same prefixing means a bare `/pods` happens
+  to work for CORE resources (`/pods` → `/api/pods`) — but always emit the canonical
+  `/api/<plural>` / `/apis/<group>/<plural>` form; it is correct for every kind.
 
 **`kube-details`** is the object's **FULL versioned selfLink** (`.metadata.selfLink` is gone in
 modern k8s, so build it), URL-encoded:
